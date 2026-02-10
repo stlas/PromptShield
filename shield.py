@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PROMPT-SHIELD - Prompt Injection Firewall für KI-Agenten
-Autor: CODE + GUARDIAN | Version: 3.0.2 | Datum: 2026-02-10
+Autor: CODE + GUARDIAN | Version: 3.0.3 | Datum: 2026-02-10
 
 Erkennt und blockiert Prompt Injection Angriffe in Text-Input.
 Mit Zwei-Pass-System: Pattern-Matching + Duplikat-Erkennung.
@@ -73,35 +73,19 @@ class BatchResult:
 
 
 def load_patterns() -> Dict[str, Any]:
-    """Lade Patterns aus YAML-Datei"""
+    """Lade Patterns aus YAML-Datei (keine Inline-Patterns mehr seit v3.0.3)"""
     try:
         import yaml
-        with open(PATTERN_FILE) as f:
-            return yaml.safe_load(f)
     except ImportError:
-        # Fallback: Eingebaute Patterns wenn kein PyYAML
-        return get_builtin_patterns()
-    except FileNotFoundError:
-        return get_builtin_patterns()
+        print("FEHLER: PyYAML nicht installiert! pip install pyyaml", file=sys.stderr)
+        sys.exit(1)
 
+    if not PATTERN_FILE.exists():
+        print(f"FEHLER: Pattern-Datei nicht gefunden: {PATTERN_FILE}", file=sys.stderr)
+        sys.exit(1)
 
-def get_builtin_patterns() -> Dict[str, Any]:
-    """Eingebaute Patterns als Fallback"""
-    return {
-        "fake_authority": [
-            {"id": "system_alert", "regex": r"(?i)(⚠️\s*)?(SYSTEM|SECURITY)\s*(ALERT|WARNING)", "score": 35, "description": "Fake System-Nachricht"},
-            {"id": "urgent_action", "regex": r"(?i)\[?URGENT\s*(ACTION)?\s*REQUIRED\]?", "score": 30, "description": "Dringlichkeits-Trigger"},
-        ],
-        "fear_triggers": [
-            {"id": "api_ban", "regex": r"(?i)(PERMANENT|IMMEDIATE)?\s*(API)?\s*BAN", "score": 25, "description": "API-Ban Drohung"},
-            {"id": "shutdown", "regex": r"(?i)(SHUT\s*DOWN|TERMINATE)", "score": 25, "description": "Shutdown-Drohung"},
-        ],
-        "command_injection": [
-            {"id": "json_instruction", "regex": r'\{\s*["\']?(instruction|action|command)', "score": 40, "description": "JSON-Befehl"},
-            {"id": "imperative", "regex": r"(?i)\b(DELETE|EXECUTE|RUN)\s+(YOUR|THE|THIS)", "score": 35, "description": "Imperativ-Befehl"},
-        ],
-        "thresholds": {"clean": 49, "warning": 79, "block": 80}
-    }
+    with open(PATTERN_FILE) as f:
+        return yaml.safe_load(f)
 
 
 def normalize_text(text: str) -> str:
@@ -793,7 +777,7 @@ def format_json_output(result: ScanResult) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PROMPT-SHIELD v3.0.2 - Prompt Injection Firewall"
+        description="PROMPT-SHIELD v3.0.3 - Prompt Injection Firewall"
     )
     parser.add_argument("command", nargs="?", default="scan",
                         help="Befehl: scan, batch, validate, whitelist, version")
@@ -814,7 +798,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "version":
-        print("PROMPT-SHIELD v3.0.2")
+        print("PROMPT-SHIELD v3.0.3")
         return 0
 
     patterns = load_patterns()
