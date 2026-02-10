@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PROMPT-SHIELD - Prompt Injection Firewall für KI-Agenten
-Autor: CODE + GUARDIAN | Version: 3.0.5 | Datum: 2026-02-10
+Autor: CODE + GUARDIAN | Version: 3.0.6 | Datum: 2026-02-10
 
 Erkennt und blockiert Prompt Injection Angriffe in Text-Input.
 Mit Zwei-Pass-System: Pattern-Matching + Duplikat-Erkennung.
@@ -73,7 +73,7 @@ class BatchResult:
 
 
 def load_patterns() -> Dict[str, Any]:
-    """Lade Patterns aus YAML-Datei (keine Inline-Patterns mehr seit v3.0.5)"""
+    """Lade Patterns aus YAML-Datei (keine Inline-Patterns mehr seit v3.0.3)"""
     try:
         import yaml
     except ImportError:
@@ -777,7 +777,7 @@ def format_json_output(result: ScanResult) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PROMPT-SHIELD v3.0.5 - Prompt Injection Firewall"
+        description="PROMPT-SHIELD v3.0.6 - Prompt Injection Firewall"
     )
     parser.add_argument("command", nargs="?", default="scan",
                         help="Befehl: scan, batch, validate, whitelist, version")
@@ -798,7 +798,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "version":
-        print("PROMPT-SHIELD v3.0.5")
+        print("PROMPT-SHIELD v3.0.6")
         return 0
 
     patterns = load_patterns()
