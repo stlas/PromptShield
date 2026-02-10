@@ -5,7 +5,7 @@
 Schützt KI-Systeme vor manipulativen Eingaben durch mehrschichtige Pattern-Erkennung und Heuristik-Scoring.
 
 [![Tests](https://img.shields.io/badge/core%20tests-29%2F29%20passing-green)]()
-[![Version](https://img.shields.io/badge/version-3.0.2-blue)]()
+[![Version](https://img.shields.io/badge/version-3.0.5-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## 🚀 Quick Start
