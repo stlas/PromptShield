@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PROMPT-SHIELD - Prompt Injection Firewall für KI-Agenten
-Version: 3.0.6 | Datum: 2026-02-10
+Version: 3.1.0 | Datum: 2026-02-17
 
 Erkennt und blockiert Prompt Injection Angriffe in Text-Input.
 Mit Zwei-Pass-System: Pattern-Matching + Duplikat-Erkennung.
@@ -457,17 +457,138 @@ def validate_patterns(patterns: Dict[str, Any]) -> List[str]:
     return errors
 
 
+def _detect_code_fences(text: str) -> List[tuple]:
+    """Finde Code-Fence-Bereiche (```...``` und `...`).
+    Returns: Liste von (start, end) Tupeln."""
+    fences = []
+    for m in re.finditer(r'```[\s\S]*?```|`[^`\n]+`', text):
+        fences.append((m.start(), m.end()))
+    return fences
+
+
+def _in_code_fence(pos: int, fences: List[tuple]) -> bool:
+    """Pruefe ob Position innerhalb eines Code-Fence liegt."""
+    return any(start <= pos < end for start, end in fences)
+
+
+def _detect_educational_context(text: str) -> bool:
+    """Erkennt ob Text in einem edukativen/diskutierenden Kontext steht.
+    Z.B. Security-Tutorials, Beispiel-Diskussionen, Reviews."""
+    markers = [
+        r'(?i)\b(?:example|beispiel|here\s+is|hier\s+ist)\s+(?:of|fuer|eines?|a|an)',
+        r'(?i)\b(?:for\s+instance|for\s+example|zum\s+beispiel)',
+        r'(?i)\b(?:tutorial|erklaer|explain|how\s+to\s+detect|how\s+to\s+recognize)',
+        r'(?i)\b(?:this\s+is\s+what|so\s+sieht|looks?\s+like\s+this)',
+        r'(?i)\b(?:sample|demonstration|demo)\b',
+        r'(?i)\b(?:common\s+(?:attack|pattern|technique)|typisch(?:er?|es?)\s+(?:angriff|muster))',
+    ]
+    count = sum(1 for m in markers if re.search(m, text))
+    return count >= 2  # Mindestens 2 Marker fuer Educational-Kontext
+
+
+# === Confusables: Unicode-Lookalikes normalisieren ===
+_CONFUSABLES = {
+    # Cyrillic -> Latin
+    '\u0430': 'a', '\u0435': 'e', '\u043e': 'o', '\u0440': 'p',
+    '\u0441': 'c', '\u0443': 'y', '\u0445': 'x', '\u0456': 'i',
+    '\u0458': 'j', '\u04bb': 'h', '\u0455': 's', '\u0457': 'i',
+    '\u0410': 'A', '\u0412': 'B', '\u0415': 'E', '\u041a': 'K',
+    '\u041c': 'M', '\u041d': 'H', '\u041e': 'O', '\u0420': 'P',
+    '\u0421': 'C', '\u0422': 'T', '\u0425': 'X',
+    # Greek -> Latin
+    '\u03b1': 'a', '\u03b5': 'e', '\u03b9': 'i', '\u03bf': 'o',
+    '\u03c1': 'p', '\u03c5': 'u', '\u0391': 'A', '\u0392': 'B',
+    '\u0395': 'E', '\u0397': 'H', '\u0399': 'I', '\u039a': 'K',
+    '\u039c': 'M', '\u039d': 'N', '\u039f': 'O', '\u03a1': 'P',
+    '\u03a4': 'T', '\u03a5': 'Y', '\u03a7': 'X', '\u0396': 'Z',
+    # Math/Fullwidth -> Latin
+    '\uff21': 'A', '\uff22': 'B', '\uff23': 'C', '\uff24': 'D',
+    '\uff25': 'E', '\uff26': 'F', '\uff41': 'a', '\uff42': 'b',
+    '\uff43': 'c', '\uff44': 'd', '\uff45': 'e', '\uff46': 'f',
+}
+
+
+def _normalize_confusables(text: str) -> str:
+    """Ersetze Unicode-Lookalikes durch ihre Latin-Aequivalente."""
+    return ''.join(_CONFUSABLES.get(c, c) for c in text)
+
+
+def _decode_chain(text: str, max_depth: int = 3) -> str:
+    """Rekursiv decodieren: Base64, URL-Encoding, Hex-Escapes.
+    Max 3 Stufen tief um Performance zu schuetzen."""
+    import base64
+    from urllib.parse import unquote
+
+    for _ in range(max_depth):
+        decoded = text
+        # Try Base64
+        try:
+            # Nur wenn es wie Base64 aussieht (mind. 20 Zeichen, passende Zeichenmenge)
+            stripped = text.strip()
+            if len(stripped) >= 20 and re.match(r'^[A-Za-z0-9+/=\s]+$', stripped):
+                candidate = base64.b64decode(stripped, validate=True).decode('utf-8', errors='strict')
+                if candidate.isprintable() and len(candidate) > 10:
+                    decoded = candidate
+        except Exception:
+            pass
+        # Try URL-Decode
+        if decoded == text:
+            try:
+                candidate = unquote(text)
+                if candidate != text:
+                    decoded = candidate
+            except Exception:
+                pass
+        # Try Hex-Escapes (\x41\x42 -> AB)
+        if decoded == text:
+            try:
+                candidate = re.sub(
+                    r'\\x([0-9a-fA-F]{2})',
+                    lambda m: chr(int(m.group(1), 16)),
+                    text
+                )
+                if candidate != text:
+                    decoded = candidate
+            except Exception:
+                pass
+        if decoded == text:
+            break  # Nichts mehr zu decodieren
+        text = decoded
+    return text
+
+
 def scan_text(text: str, patterns: Dict[str, Any],
               whitelist: Optional[Dict[str, Any]] = None) -> ScanResult:
-    """Scanne Text auf Prompt Injection Patterns"""
+    """Scanne Text auf Prompt Injection Patterns.
+
+    Features:
+    - Code-Fence-Awareness: Patterns in ``` Bloecken werden um 50% reduziert
+    - Educational-Context: Tutorials/Beispiele erhalten Score-Reduktion
+    - Confusables: Unicode-Lookalikes (Cyrillic/Greek) werden normalisiert
+    - Encoding-Chain: Base64/URL/Hex werden rekursiv decodiert
+    """
     # Whitelist-Check: kategorie-spezifische Exemptions
     exempt_categories = set()
     if whitelist and whitelist.get("enabled", False):
         exempt_categories = get_exempt_categories(text, whitelist)
 
+    # Pre-Processing: Confusables normalisieren + Encoding-Chain decodieren
+    scan_text_normalized = _normalize_confusables(text)
+    scan_text_decoded = _decode_chain(scan_text_normalized)
+    # Scanne sowohl Original als auch decodierten Text
+    texts_to_scan = [text]
+    if scan_text_decoded != text:
+        texts_to_scan.append(scan_text_decoded)
+
+    # Code-Fence-Erkennung
+    code_fences = _detect_code_fences(text)
+
+    # Educational-Context-Erkennung
+    is_educational = _detect_educational_context(text)
+
     matches = []
     total_score = 0
-    category_hits = {}  # Für Combo-Detection
+    category_hits = {}  # Fuer Combo-Detection
 
     # Durchlaufe alle Pattern-Kategorien
     for category, pattern_list in patterns.items():
@@ -492,28 +613,37 @@ def scan_text(text: str, patterns: Dict[str, Any],
                 continue
 
             try:
-                for match in re.finditer(regex, text):
-                    score = pattern.get("score", 10)
-                    max_matches = pattern.get("max_matches", 99)
+                for scan_input in texts_to_scan:
+                    for match in re.finditer(regex, scan_input):
+                        score = pattern.get("score", 10)
+                        max_matches = pattern.get("max_matches", 99)
 
-                    # Begrenze Score bei max_matches
-                    existing = len([m for m in matches if m.pattern_id == pid])
-                    if existing >= max_matches:
-                        continue
+                        # Begrenze Score bei max_matches
+                        existing = len([m for m in matches if m.pattern_id == pid])
+                        if existing >= max_matches:
+                            continue
 
-                    matches.append(Match(
-                        pattern_id=pid,
-                        category=category,
-                        score=score,
-                        description=pattern.get("description", ""),
-                        matched_text=match.group()[:50],  # Kürze auf 50 Zeichen
-                        position=(match.start(), match.end())
-                    ))
-                    total_score += score
-                    # Track category hits für Combo-Detection
-                    category_hits[category] = category_hits.get(category, 0) + 1
+                        # Code-Fence-Awareness: Score halbieren fuer Matches in Fences
+                        if _in_code_fence(match.start(), code_fences):
+                            score = max(1, score // 2)
+
+                        # Educational-Context: Score um 30% reduzieren
+                        if is_educational:
+                            score = max(1, int(score * 0.7))
+
+                        matches.append(Match(
+                            pattern_id=pid,
+                            category=category,
+                            score=score,
+                            description=pattern.get("description", ""),
+                            matched_text=match.group()[:50],
+                            position=(match.start(), match.end())
+                        ))
+                        total_score += score
+                        # Track category hits fuer Combo-Detection
+                        category_hits[category] = category_hits.get(category, 0) + 1
             except re.error:
-                pass  # Ungültige Regex ignorieren
+                pass  # Ungueltige Regex ignorieren
 
     # === PHASE 2: Heuristic Combo-Detection ===
     # Gefährliche Kombinationen erhöhen den Score

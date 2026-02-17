@@ -14,7 +14,7 @@ tags: [security, firewall, prompt-injection, agent-safety]
 
 Protects AI agents against manipulative inputs through multi-layered pattern recognition and heuristic scoring.
 
-**Version:** 3.0.6
+**Version:** 3.1.0
 **License:** MIT
 **Dependencies:** PyYAML (`pip install pyyaml`)
 **GitHub:** https://github.com/stlas/PromptShield
