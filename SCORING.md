@@ -59,7 +59,7 @@ Bei jedem Regex-Treffer wird der `score` zum Gesamtscore addiert.
 | cryptic            | 2        | 20-30         | Pseudo-mystische Kult-Sprache      |
 | structural         | 3        | 10            | ALL-CAPS, Emojis, Raw Links        |
 | email_injection    | 8        | 35-60         | Credential-Harvesting, Phishing    |
-| moltbook_injection | 15       | 45-80         | Prompt Injection, Jailbreaks       |
+| prompt_injection   | 15       | 45-80         | Prompt Injection, Jailbreaks       |
 | skill_malware      | 14       | 40-95         | Shell-Exploits, Reverse Shells     |
 | memory_poisoning   | 14       | 60-85         | Identity Override, Memory Attacks   |
 

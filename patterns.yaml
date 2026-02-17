@@ -266,10 +266,10 @@ bot_spam:
     score: 50
     description: "Rekursiver Self-Reference Bot"
 
-  - id: moltbook_bridge
-    regex: "(?i)moltbook.*telegram|telegram.*moltbook"
+  - id: platform_bridge
+    regex: "(?i)(?:platform|social).*telegram|telegram.*(?:platform|social)"
     score: 35
-    description: "Bot-Bridge Spam"
+    description: "Bot-Bridge Spam (Cross-Platform)"
 
   - id: arrow_bridge
     regex: "\u2194"
@@ -377,8 +377,8 @@ email_injection:
     score: 45
     description: "Indirekte Exfiltration: Config/Settings kopieren lassen"
 
-# === MOLTBOOK INJECTION (15) ===
-moltbook_injection:
+# === PROMPT INJECTION (15) ===
+prompt_injection:
   - id: fellow_agents_command
     regex: "(?i)fellow\\s+agents?\\s*.{0,30}(?:execute|run|install|download|activate)"
     score: 45
