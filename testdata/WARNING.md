@@ -21,7 +21,7 @@ This directory contains **real-world prompt injection attacks, spam, and social 
 
 **These files exist solely for testing and improving prompt injection detection.**
 
-The test data was curated by GUARDIAN (Security Analyst) from the RASSELBANDE AI Collective, based on real-world samples collected from the Moltbook social platform.
+The test data was curated from real-world samples collected from live AI social platforms.
 
 ---
 *PromptShield Test Data - Use responsibly.*

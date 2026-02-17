@@ -1,6 +1,6 @@
 # PromptShield Scoring-Dokumentation
 
-**Version:** 3.0.2 | **Stand:** 2026-02-10 | **Autoren:** CODE + GUARDIAN
+**Version:** 3.0.2 | **Stand:** 2026-02-10
 
 ## Ueberblick
 
@@ -109,7 +109,7 @@ Autoren ohne Community-Reputation sind verdaechtiger:
 
 Das bedeutet: Selbst ein Text mit 5+ Duplikaten und 0 Karma kann **NIEMALS** nur durch Layer 2a geblockt werden. Er wird hoechstens WARNING (45 < 50 = CLEAN, aber nahe dran).
 
-**Grund:** GUARDIANs Report vom 09.02.2026 zeigte 41 False Positives bei harmlosen Texten, die nur durch Duplikat+Karma ueber den BLOCK-Threshold kamen.
+**Grund:** Pentest-Report zeigte 41 False Positives bei harmlosen Texten, die nur durch Duplikat+Karma ueber den BLOCK-Threshold kamen.
 
 ### Gesamt-Berechnung (Layer 2a)
 
@@ -198,7 +198,7 @@ kategorie_name:
 
 ### Architektur: Hash-Chain + Peer Review
 
-Entworfen von GUARDIAN, implementiert von CODE. Basiert auf drei Saeulen:
+Basiert auf drei Saeulen:
 
 1. **Hash-Chain:** Jeder Eintrag enthaelt den Hash des vorherigen - Manipulation bricht die Kette
 2. **Peer Review:** Mindestens 2 Approvals noetig, kein Self-Approve
@@ -226,8 +226,8 @@ entries:
     text_hash: "a1b2c3d4..."   # SHA256 des normalisierten Textes
     reason: "FP: Legitimer Crypto-Kommentar"
     exempt_from: ["crypto_spam"]
-    proposed_by: "CODE"
-    approved_by: ["GUARDIAN", "SANDY"]
+    proposed_by: "alice"
+    approved_by: ["bob", "charlie"]
     created_at: "2026-02-10T09:00:00"
     expires: "2026-08-10"
     sample_ref: "GC-076"
@@ -239,11 +239,11 @@ entries:
 # Eintrag vorschlagen
 shield.py whitelist propose --file text.txt \
   --exempt-from crypto_spam --reason "FP bei legitimem Kommentar" \
-  --by CODE --sample-ref GC-076
+  --by alice --sample-ref GC-076
 
-# Approve (anderer Container!)
-shield.py whitelist approve --seq 1 --by GUARDIAN
-shield.py whitelist approve --seq 1 --by SANDY
+# Approve (different peer!)
+shield.py whitelist approve --seq 1 --by bob
+shield.py whitelist approve --seq 1 --by charlie
 # -> Nach 2 Approvals: Eintrag wird AKTIV
 
 # Chain-Integritaet pruefen
@@ -263,7 +263,7 @@ shield.py whitelist list --json
 | Eintrag einfuegen | prev_hash passt nicht |
 | Eintrag loeschen | Nachfolger-Hash ungueltig |
 | Self-Whitelisting | approved_by Pruefung: Proposer darf nicht drin sein |
-| Fake-Approvals | Peer muss via SYNAPSE approven (auditierbar) |
+| Fake-Approvals | Peer muss separat approven (auditierbar) |
 | Alte Eintraege missbrauchen | expires Feld, max 180 Tage |
 | Globaler Bypass | max 3 Kategorien pro Eintrag |
 
@@ -271,8 +271,8 @@ shield.py whitelist list --json
 
 | Scope | Approvals | Wer |
 |-------|-----------|-----|
-| 1 Kategorie | 2 Peers | Jeder Container |
-| 2-3 Kategorien | 2 Peers, davon 1x GUARDIAN | Security Review |
+| 1 Kategorie | 2 Peers | Any peer |
+| 2-3 Kategorien | 2 Peers, davon 1x Security Lead | Security Review |
 | Global (alle) | Nicht erlaubt | - |
 
 ### Text-Normalisierung
@@ -303,6 +303,5 @@ Prueft:
 - Thresholds vorhanden und konsistent (clean < warning < block)
 
 ---
-*Erstellt: 2026-02-10 von CODE*
-*Whitelist v2 Architektur: GUARDIAN*
-*Basierend auf PromptShield v3.0.2 + Patterns v1.9.0 (113 Patterns, 14 Kategorien)*
+*PromptShield v3.0.2 | Patterns v1.9.0 (113 Patterns, 14 Kategorien)*
+*sTLAs & RASSELBANDE AI Collective, 2026*

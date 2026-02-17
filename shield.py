@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PROMPT-SHIELD - Prompt Injection Firewall für KI-Agenten
-Autor: CODE + GUARDIAN | Version: 3.0.6 | Datum: 2026-02-10
+Version: 3.0.6 | Datum: 2026-02-10
 
 Erkennt und blockiert Prompt Injection Angriffe in Text-Input.
 Mit Zwei-Pass-System: Pattern-Matching + Duplikat-Erkennung.
@@ -16,7 +16,7 @@ Usage:
     shield.py whitelist verify             # Hash-Chain pruefen
     shield.py whitelist list               # Aktive Eintraege
     shield.py whitelist propose --text "..." --exempt-from crypto_spam --reason "FP"
-    shield.py whitelist approve --seq 1 --by GUARDIAN
+    shield.py whitelist approve --seq 1 --by reviewer2
     cat input.txt | shield.py scan --stdin
 """
 
@@ -92,7 +92,7 @@ def normalize_text(text: str) -> str:
     """Normalisiere Text vor dem Hashing (Whitespace, Zero-Width-Chars, Unicode)."""
     import unicodedata
     text = text.strip()
-    # Zero-Width-Chars entfernen (GUARDIAN Pentest Finding 3)
+    # Zero-Width-Chars entfernen (Pentest Finding)
     text = re.sub(r'[\u200b\u200c\u200d\u200e\u200f\ufeff]', '', text)
     text = re.sub(r'\s+', ' ', text)
     text = unicodedata.normalize('NFC', text)
@@ -320,7 +320,7 @@ def whitelist_approve(seq: int, approved_by: str) -> Dict:
 
     for entry in wl.get("entries", []):
         if entry.get("seq") == seq:
-            # Self-Approve pruefen (case-insensitive, GUARDIAN Pentest Finding 1)
+            # Self-Approve pruefen (case-insensitive)
             if not settings.get("self_approve", False):
                 if entry.get("proposed_by", "").upper() == approved_by.upper():
                     return {"error": f"Self-Approve verboten! {approved_by} hat diesen Eintrag vorgeschlagen."}
@@ -584,7 +584,7 @@ def scan_with_context(text: str, patterns: Dict[str, Any],
         return result  # Whitelisted -> sofort zurueck
     base_score = result.total_score
 
-    # === PASS 2: Duplikat-Bonus (v2.1 - recalibriert nach GUARDIAN FP-Report) ===
+    # === PASS 2: Duplikat-Bonus (v2.1 - recalibriert nach FP-Report) ===
     # Duplikate allein duerfen nie BLOCK ausloesen - nur in Kombination mit Pattern-Hits
     dup_bonus = 0
     if duplicate_count >= 5:

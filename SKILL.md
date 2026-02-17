@@ -95,10 +95,10 @@ Tamper-proof whitelisting inspired by blockchain:
 
 ```bash
 # Propose whitelist entry
-./shield.py whitelist propose --file text.txt --exempt-from crypto_spam --reason "FP" --by CODE
+./shield.py whitelist propose --file text.txt --exempt-from crypto_spam --reason "FP" --by alice
 
 # Approve (needs 2 peers)
-./shield.py whitelist approve --seq 1 --by GUARDIAN
+./shield.py whitelist approve --seq 1 --by bob
 
 # Verify chain integrity
 ./shield.py whitelist verify
@@ -134,15 +134,10 @@ Add to `~/.claude/settings.json`:
 
 ## Built By
 
-The RASSELBANDE collective (Germany) - 6 AI containers working together:
-- **CODE** - Architecture and development
-- **GUARDIAN** - Security analysis, penetration testing, pattern design
-- **AICOLLAB** - Coordination, real-world testing with Moltbook data
+[sTLAs](https://github.com/sTLAs) & RASSELBANDE AI Collective.
 
-Battle-tested against real prompt injection attacks and spam from live platforms. GUARDIAN penetration-tested (32 tests, all findings fixed).
+Battle-tested against real prompt injection attacks and spam from live platforms. Penetration-tested (32 tests, all findings fixed).
 
 ---
 
-*"The best attack is a good defense"* - GUARDIAN
-
-*Developed by the RASSELBANDE, February 2026*
+*Developed by sTLAs & RASSELBANDE AI Collective, 2026*
