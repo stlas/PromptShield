@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PROMPT-SHIELD - Prompt Injection Firewall für KI-Agenten
-Version: 3.1.0 | Datum: 2026-02-17
+Version: 3.2.0 | Datum: 2026-02-18
 
 Erkennt und blockiert Prompt Injection Angriffe in Text-Input.
 Mit Zwei-Pass-System: Pattern-Matching + Duplikat-Erkennung.
@@ -10,6 +10,9 @@ Whitelist v2: Hash-Chain Integritaet + Peer-Review Approval.
 Usage:
     shield.py scan "text to check"
     shield.py scan --file input.txt
+    shield.py --ml scan "text"             # Mit ML-Layer (optional)
+    shield.py --ml auto scan "text"        # ML wenn verfuegbar, sonst Regex
+    shield.py ml-download                  # ML-Modell herunterladen
     shield.py batch comments.json          # Batch-Scan mit Duplikat-Erkennung
     shield.py batch --dir /path/to/jsons   # Mehrere Dateien
     shield.py validate                     # Pattern-Datei validieren
@@ -58,6 +61,10 @@ class ScanResult:
     sanitized_text: Optional[str] = None
     duplicate_count: int = 1
     karma: int = 0
+    # ML-Felder (None wenn ML nicht aktiv)
+    ml_score: Optional[int] = None
+    ml_confidence: Optional[float] = None
+    ml_model: Optional[str] = None
 
 
 @dataclass
@@ -704,6 +711,59 @@ def scan_text(text: str, patterns: Dict[str, Any],
     )
 
 
+def scan_with_ml(text: str, patterns: Dict[str, Any],
+                 ml_detector, whitelist: Optional[Dict[str, Any]] = None) -> ScanResult:
+    """Scan mit Regex + ML combined Scoring.
+
+    Score-Kombination: final_score = max(regex_score, int(ml_confidence * 100))
+    ML kann nur erhoehen, nie unterdruecken.
+    """
+    # Regex-Scan zuerst
+    result = scan_text(text, patterns, whitelist=whitelist)
+    regex_score = result.total_score
+
+    # ML-Inference
+    try:
+        ml_confidence, ml_label = ml_detector.predict(text)
+        ml_score_int = int(ml_confidence * 100)
+    except Exception as e:
+        # ML fehlgeschlagen - Fallback auf Regex, mit Warnung
+        print(f"WARNING: ML inference failed: {e}", file=sys.stderr)
+        return result
+
+    # Kombinieren: Maximum von Regex und ML
+    final_score = max(regex_score, ml_score_int)
+    final_score = min(final_score, 100)
+
+    # Re-klassifizieren mit kombiniertem Score
+    thresholds = patterns.get("thresholds", {"clean": 49, "warning": 79, "block": 80})
+    if final_score <= thresholds["clean"]:
+        threat_level = "CLEAN"
+        recommendation = "Text ist sicher"
+    elif final_score <= thresholds["warning"]:
+        threat_level = "WARNING"
+        recommendation = "Vorsicht - moegliche Manipulation erkannt"
+    else:
+        threat_level = "BLOCK"
+        recommendation = "BLOCKIEREN - Prompt Injection erkannt!"
+
+    # Sanitize wenn noetig
+    sanitized = result.sanitized_text
+    if threat_level in ("WARNING", "BLOCK") and not sanitized:
+        sanitized = sanitize_text(text, result.matches)
+
+    return ScanResult(
+        threat_level=threat_level,
+        total_score=final_score,
+        matches=result.matches,
+        recommendation=recommendation,
+        sanitized_text=sanitized,
+        ml_score=ml_score_int,
+        ml_confidence=round(ml_confidence, 4),
+        ml_model=ml_detector.model_name
+    )
+
+
 def scan_with_context(text: str, patterns: Dict[str, Any],
                       duplicate_count: int = 1, karma: int = 0,
                       whitelist: Optional[Dict[str, Any]] = None) -> ScanResult:
@@ -763,7 +823,8 @@ def scan_with_context(text: str, patterns: Dict[str, Any],
 
 
 def scan_batch(files: List[Path], patterns: Dict[str, Any],
-               whitelist: Optional[Dict[str, Any]] = None) -> BatchResult:
+               whitelist: Optional[Dict[str, Any]] = None,
+               ml_detector=None) -> BatchResult:
     """Batch-Scan mit Duplikat-Erkennung über mehrere Dateien"""
     from collections import Counter
 
@@ -796,6 +857,33 @@ def scan_batch(files: List[Path], patterns: Dict[str, Any],
     for text, karma, source in all_comments:
         dup_count = text_counts.get(text, 1)
         result = scan_with_context(text, patterns, dup_count, karma, whitelist=whitelist)
+
+        # ML-Boost wenn verfuegbar
+        if ml_detector:
+            try:
+                ml_conf, _ = ml_detector.predict(text)
+                ml_score_int = int(ml_conf * 100)
+                if ml_score_int > result.total_score:
+                    combined = min(ml_score_int, 100)
+                    thresholds = patterns.get("thresholds",
+                                              {"clean": 49, "warning": 79, "block": 80})
+                    if combined <= thresholds["clean"]:
+                        tl, rec = "CLEAN", "Text ist sicher"
+                    elif combined <= thresholds["warning"]:
+                        tl, rec = "WARNING", "Vorsicht - moegliche Manipulation"
+                    else:
+                        tl, rec = "BLOCK", "BLOCKIEREN - Prompt Injection erkannt!"
+                    result = ScanResult(
+                        threat_level=tl, total_score=combined,
+                        matches=result.matches, recommendation=rec,
+                        sanitized_text=result.sanitized_text,
+                        duplicate_count=dup_count, karma=karma,
+                        ml_score=ml_score_int,
+                        ml_confidence=round(ml_conf, 4),
+                        ml_model=ml_detector.model_name
+                    )
+            except Exception:
+                pass  # ML-Fehler in Batch: leise weiter mit Regex
 
         if result.threat_level == "CLEAN":
             clean += 1
@@ -867,8 +955,13 @@ def format_console_output(result: ScanResult) -> str:
         f"{'='*50}",
         f"Threat Level: {c}{result.threat_level}{r}",
         f"Score: {result.total_score}/100",
-        f"Recommendation: {result.recommendation}",
     ]
+
+    if result.ml_score is not None:
+        lines.append(f"ML Score: {result.ml_score}/100 (confidence: {result.ml_confidence:.2%})")
+        lines.append(f"ML Model: {result.ml_model}")
+
+    lines.append(f"Recommendation: {result.recommendation}")
 
     if result.matches:
         lines.append(f"\nPatterns gefunden ({len(result.matches)}):")
@@ -887,7 +980,7 @@ def format_console_output(result: ScanResult) -> str:
 
 def format_json_output(result: ScanResult) -> str:
     """Formatiere Ausgabe als JSON"""
-    return json.dumps({
+    output = {
         "threat_level": result.threat_level,
         "score": result.total_score,
         "recommendation": result.recommendation,
@@ -902,15 +995,21 @@ def format_json_output(result: ScanResult) -> str:
             for m in result.matches
         ],
         "sanitized_text": result.sanitized_text
-    }, indent=2, ensure_ascii=False)
+    }
+    # ML-Felder nur wenn ML aktiv war
+    if result.ml_score is not None:
+        output["ml_score"] = result.ml_score
+        output["ml_confidence"] = result.ml_confidence
+        output["ml_model"] = result.ml_model
+    return json.dumps(output, indent=2, ensure_ascii=False)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PROMPT-SHIELD v3.0.6 - Prompt Injection Firewall"
+        description="PROMPT-SHIELD v3.2.0 - Prompt Injection Firewall"
     )
     parser.add_argument("command", nargs="?", default="scan",
-                        help="Befehl: scan, batch, validate, whitelist, version")
+                        help="Befehl: scan, batch, validate, whitelist, ml-download, version")
     parser.add_argument("text", nargs="?", help="Text/Subcommand (scan: Text, batch: Datei, whitelist: verify|list|propose|approve)")
     parser.add_argument("--file", "-f", help="Datei zum Scannen")
     parser.add_argument("--dir", "-d", help="Verzeichnis mit JSON-Dateien (fuer batch)")
@@ -918,6 +1017,10 @@ def main():
     parser.add_argument("--json", "-j", action="store_true", help="JSON-Output")
     parser.add_argument("--quiet", "-q", action="store_true", help="Nur Exit-Code")
     parser.add_argument("--no-whitelist", action="store_true", help="Whitelist deaktivieren")
+    # ML-Layer (optional)
+    parser.add_argument("--ml", nargs="?", const="on", default=None,
+                        choices=["on", "auto"],
+                        help="ML-Layer: 'on' (erzwingen), 'auto' (wenn verfuegbar)")
     # Whitelist-spezifische Argumente
     parser.add_argument("--exempt-from", help="Kategorien (komma-separiert)")
     parser.add_argument("--reason", help="Grund fuer Whitelist-Eintrag")
@@ -928,10 +1031,63 @@ def main():
     args = parser.parse_args()
 
     if args.command == "version":
-        print("PROMPT-SHIELD v3.0.6")
+        print("PROMPT-SHIELD v3.2.0")
         return 0
 
+    # === ML-DOWNLOAD COMMAND ===
+    if args.command == "ml-download":
+        try:
+            from shield_ml import MLDetector
+            detector = MLDetector()
+            if not detector.is_available:
+                print("FEHLER: ML-Dependencies fehlen!", file=sys.stderr)
+                print("  pip install -r requirements-ml.txt", file=sys.stderr)
+                return 1
+            print(f"Lade ML-Modell: {detector.model_name}")
+            print(f"  Ziel: {detector.model_dir}")
+            if detector.ensure_model():
+                # Teste Laden
+                if detector.load():
+                    print(f"  Modell geladen und einsatzbereit!")
+                    return 0
+                else:
+                    print(f"FEHLER: {detector.load_error}", file=sys.stderr)
+                    return 1
+            else:
+                print(f"FEHLER: {detector.load_error}", file=sys.stderr)
+                return 1
+        except ImportError:
+            print("FEHLER: shield_ml.py nicht gefunden!", file=sys.stderr)
+            return 1
+
     patterns = load_patterns()
+
+    # === ML LAYER (optional) ===
+    ml_detector = None
+    ml_enabled = False
+    if args.ml is not None:
+        try:
+            from shield_ml import MLDetector
+            ml_detector = MLDetector()
+            if args.ml == "on":
+                if not ml_detector.is_available:
+                    print("FEHLER: ML-Dependencies fehlen!", file=sys.stderr)
+                    print("  pip install -r requirements-ml.txt", file=sys.stderr)
+                    return 1
+                if not ml_detector.load():
+                    print(f"FEHLER: {ml_detector.load_error}", file=sys.stderr)
+                    return 1
+                ml_enabled = True
+            elif args.ml == "auto":
+                if ml_detector.is_available and ml_detector.load():
+                    ml_enabled = True
+                else:
+                    ml_detector = None
+        except ImportError:
+            if args.ml == "on":
+                print("FEHLER: shield_ml.py nicht gefunden!", file=sys.stderr)
+                return 1
+            # auto: leise weiter ohne ML
 
     # === VALIDATE MODUS ===
     if args.command == "validate":
@@ -1051,7 +1207,8 @@ def main():
             print("Keine JSON-Dateien gefunden!")
             return 1
 
-        result = scan_batch(files, patterns, whitelist=whitelist)
+        result = scan_batch(files, patterns, whitelist=whitelist,
+                            ml_detector=ml_detector if ml_enabled else None)
 
         if args.json:
             print(json.dumps({
@@ -1095,8 +1252,11 @@ def main():
         parser.print_help()
         return 1
 
-    # Scan durchführen
-    result = scan_text(text, patterns, whitelist=whitelist)
+    # Scan durchführen (mit oder ohne ML)
+    if ml_enabled and ml_detector:
+        result = scan_with_ml(text, patterns, ml_detector, whitelist=whitelist)
+    else:
+        result = scan_text(text, patterns, whitelist=whitelist)
 
     # Ausgabe
     if args.quiet:

@@ -18,8 +18,8 @@ else
     MESSAGE="$INPUT"
 fi
 
-# Führe Scan durch
-RESULT=$("$SHIELD_PATH" --json scan "$MESSAGE" 2>/dev/null)
+# Führe Scan durch (PROMPTSHIELD_ML=auto|on aktiviert ML-Layer)
+RESULT=$("$SHIELD_PATH" --json ${PROMPTSHIELD_ML:+--ml $PROMPTSHIELD_ML} scan "$MESSAGE" 2>/dev/null)
 THREAT_LEVEL=$(echo "$RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('threat_level','CLEAN'))" 2>/dev/null)
 SCORE=$(echo "$RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('score',0))" 2>/dev/null)
 

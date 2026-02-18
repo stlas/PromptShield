@@ -1,0 +1,10 @@
+# PromptShield ML Layer - Optionale Dependencies
+# Install: pip install -r requirements-ml.txt
+#
+# Diese Pakete werden NUR benoetigt wenn --ml verwendet wird.
+# Ohne diese bleibt PromptShield ein reiner Regex-Scanner.
+
+onnxruntime>=1.16.0
+tokenizers>=0.15.0
+huggingface_hub>=0.20.0
+numpy>=1.24.0

@@ -3,11 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org)
 [![Tests](https://img.shields.io/badge/core%20tests-29%2F29%20passing-green)]()
-<<<<<<< HEAD
-[![Version](https://img.shields.io/badge/version-3.1.0-blue)]()
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-=======
->>>>>>> 7e5634a (v3.1.0: Sanitize internal platform references + update README)
+[![Version](https://img.shields.io/badge/version-3.2.0-blue)]()
 
 **Prompt Injection Firewall for AI Agents -- 113 detection patterns across 14 categories. Protect your LLM applications.**
 
@@ -35,6 +31,26 @@ cat message.txt | ./shield.py scan --stdin
 ```
 
 Exit codes: `0` = CLEAN, `1` = WARNING, `2` = BLOCK.
+
+## Optional: ML Layer
+
+PromptShield can optionally use a DeBERTa-v3 neural network for detecting subtle prompt injections that regex patterns miss (e.g., jailbreak attempts, paraphrased attacks). The ML layer is **fully optional** -- without it, PromptShield works as a pure regex scanner.
+
+```bash
+# Install ML dependencies
+pip install -r requirements-ml.txt
+
+# Download the model (~370 MB, one-time)
+./shield.py ml-download
+
+# Scan with ML enabled
+./shield.py --ml on scan "text to check"
+
+# Use ML if available, fall back to regex-only
+./shield.py --ml auto scan "text to check"
+```
+
+The ML model ([protectai/deberta-v3-base-prompt-injection-v2](https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2), Apache-2.0) runs locally on CPU via ONNX Runtime. Scoring: `final_score = max(regex_score, ml_score)` -- ML can boost detection but never suppress regex findings.
 
 ## What It Detects
 
@@ -70,26 +86,15 @@ Combo detection boosts the score when multiple attack categories appear together
 | Authority + Command | +10 |
 | 4+ categories triggered | +15 |
 
+**Layer 3 -- ML Classification (optional):**
+When `--ml` is enabled, each input is also classified by a fine-tuned DeBERTa-v3-base model. The final score is `max(regex_score, ml_score)` -- ML can only increase detection, never suppress regex findings. This catches sophisticated attacks that evade pattern matching.
+
 **Context Awareness:**
 - Patterns inside code fences (`` ``` ``) get reduced scores -- tutorials and documentation are not attacks
 - Educational content (how-to, examples) is detected and scored conservatively
 - Unicode confusables (Cyrillic/Greek/fullwidth lookalikes) are normalized before scanning
 - Recursive encoding chains (Base64, URL encoding, hex) are decoded up to 3 levels deep
 
-<<<<<<< HEAD
-```
-prompt-shield/
-├── shield.py              # Haupt-Scanner (Layer 1 + 2a)
-├── patterns.yaml          # Pattern-Datenbank (113 Patterns, 14 Kategorien)
-├── whitelist.yaml         # Hash-Chain Whitelist v2
-├── prompt-shield-hook.sh  # Claude Code Hook
-├── test_shield.py         # Test-Suite (29 Core + 135 Curated Tests)
-├── SCORING.md             # Scoring-Dokumentation
-├── LICENSE                # MIT License
-└── testdata/
-    ├── WARNING.md         # ⚠️ LIES DIES ZUERST!
-    └── curated-comments.json  # 135 kuratierte Testfaelle
-=======
 ### Threat Levels
 
 | Level | Score | Action |
@@ -111,7 +116,6 @@ Known safe content can be whitelisted with hash-chain integrity verification:
 
 # Verify hash chain
 ./shield.py whitelist verify
->>>>>>> 7e5634a (v3.1.0: Sanitize internal platform references + update README)
 ```
 
 ## Detection Approach
@@ -177,24 +181,20 @@ your_category:
 Then validate:
 
 ```bash
-<<<<<<< HEAD
-./test_shield.py
-# Core Tests:     29/29 passed
-# Curated Tests:  73/135 passed (Layer 1 only - Layer 2a improves detection)
-=======
 ./shield.py validate
->>>>>>> 7e5634a (v3.1.0: Sanitize internal platform references + update README)
 ```
 
 ## Project Structure
 
 ```
 PromptShield/
-├── shield.py              # Main scanner (Layer 1 + 2)
+├── shield.py              # Main scanner (Layer 1 + 2 + 3)
+├── shield_ml.py           # Optional ML layer (DeBERTa ONNX)
 ├── patterns.yaml          # Pattern database (113 patterns, 14 categories)
 ├── whitelist.yaml          # Hash-chain whitelist with peer review
 ├── prompt-shield-hook.sh  # Claude Code hook
-├── test_shield.py         # Test suite
+├── test_shield.py         # Test suite (core + ML + curated)
+├── requirements-ml.txt    # Optional ML dependencies
 ├── SCORING.md             # Detailed scoring documentation
 ├── LICENSE                # MIT License
 └── testdata/              # Real-world attack samples (use with caution)
@@ -209,17 +209,16 @@ PromptShield/
 pip install pyyaml
 ```
 
-<<<<<<< HEAD
-MIT License - Frei nutzbar fuer alle KI-Agenten!
-=======
 No other dependencies. Single-file scanner, runs anywhere Python runs.
->>>>>>> 7e5634a (v3.1.0: Sanitize internal platform references + update README)
+
+**Optional ML Layer** (for enhanced detection):
+```bash
+pip install -r requirements-ml.txt   # onnxruntime, tokenizers, huggingface_hub, numpy
+./shield.py ml-download              # Download model (~370 MB)
+```
 
 ## Contributing
 
-<<<<<<< HEAD
-*Developed by sTLAs & RASSELBANDE AI Collective, 2026*
-=======
 Found a bypass? Have a new pattern to contribute? [Open an issue](https://github.com/sTLAs/PromptShield/issues) or submit a pull request.
 
 If you're reporting a bypass, please include the input text that should have been caught and the expected threat level.
@@ -231,4 +230,3 @@ If you're reporting a bypass, please include the input text that should have bee
 ## Credits
 
 Built by [sTLAs & RASSELBANDE AI Collective](https://github.com/sTLAs).
->>>>>>> 7e5634a (v3.1.0: Sanitize internal platform references + update README)

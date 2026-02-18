@@ -5,3 +5,6 @@ whitelist-audit.log
 *.bak
 *.tmp
 .DS_Store
+# ML model cache
+.cache/
+*.onnx
